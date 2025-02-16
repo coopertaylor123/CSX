@@ -1,0 +1,49 @@
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import math
+
+#mass-spring class
+class MassSpring:
+    def __init__(self, k, m, dt, y0, v0):
+        self.k = k
+        self.m = m
+        self.dt = dt
+        self.t = [0]
+        self.y = [y0]
+        self.v = [v0]
+        self.a = [self.compute_acc(y0)]
+    
+    def compute_acc(self, y):
+        return - (self.k / self.m) * y
+    
+    def step(self):
+        cy = self.y[-1]
+        cv = self.v[-1]
+        ct = self.t[-1]
+        na = self.compute_acc(cy)
+        nv = cv + na * self.dt
+        ny = cy + nv * self.dt
+        nt = ct + self.dt
+        self.a.append(na)
+        self.v.append(nv)
+        self.y.append(ny)
+        self.t.append(nt)
+
+ms = MassSpring(k=5.0, m=2.0, dt=0.02, y0=0.06, v0=3.0)
+
+def animate(frame):
+    ms.step()
+    plt.cla()
+    plt.plot(ms.t, ms.y, color='blue')
+    plt.xlabel('time (s)')
+    plt.ylabel('displacement (m)')
+    plt.title('mass-spring oscillation')
+    if ms.t[-1] > 10:
+        plt.xlim(ms.t[-1] - 10, ms.t[-1])
+    else:
+        plt.xlim(0, 10)
+    plt.ylim(-4, 4)
+
+fig, ax = plt.subplots()
+ani = FuncAnimation(fig, animate, interval=50, cache_frame_data=False)  #update every 50ms
+plt.show()
