@@ -1,0 +1,85 @@
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import math
+
+
+G = 6.67430e-11
+
+# Orbital system class
+class OrbitalSystem:
+    def __init__(self, mass_star, mass_planet, dt, x0, y0, vx0, vy0):
+        self.M = mass_star  
+        self.m = mass_planet  
+        self.dt = dt  
+
+        #initialize
+        self.t = [0]
+        self.x = [x0]
+        self.y = [y0]
+        self.vx = [vx0]
+        self.vy = [vy0]
+        self.ax, self.ay = self.compute_acc(x0, y0)
+
+    def compute_acc(self, x, y):
+        r2 = x**2 + y**2
+        r = math.sqrt(r2)
+        a = -G * self.M / r2
+        return a * (x / r), a * (y / r)
+
+    def step(self):
+        cx, cy = self.x[-1], self.y[-1]
+        cvx, cvy = self.vx[-1], self.vy[-1]
+        ct = self.t[-1]
+
+        #comp new acceleration
+        nax, nay = self.compute_acc(cx, cy)
+
+        #velocity update
+        nvx = cvx + nax * self.dt
+        nvy = cvy + nay * self.dt
+
+        #position update
+        nx = cx + nvx * self.dt
+        ny = cy + nvy * self.dt
+
+        #time update
+        nt = ct + self.dt
+
+        #store new values
+        self.vx.append(nvx)
+        self.vy.append(nvy)
+        self.x.append(nx)
+        self.y.append(ny)
+        self.t.append(nt)
+
+
+mass_sun = 1.989e30  
+mass_earth = 5.972e24  
+dt = 3600 * 12  
+x0 = 1.5e11  
+y0 = 0 
+vx0 = 0 
+vy0 = 29780  
+
+earth_radius = 6.371e6  
+sun_radius = 6.9634e8  
+
+
+orbit = OrbitalSystem(mass_sun, mass_earth, dt, x0, y0, vx0, vy0)
+
+def animate(frame):
+    orbit.step()
+    plt.cla()
+    plt.scatter(0, 0, color='yellow', s=300, label='Sun')  # Sun at origin
+    plt.scatter(orbit.x[-1], orbit.y[-1], color='blue', s=50, label='Earth')
+    plt.plot(orbit.x, orbit.y, color='blue', linewidth=0.8)
+    plt.xlabel('x position (m)')
+    plt.ylabel('y position (m)')
+    plt.title('Planet Orbiting a Star')
+    plt.xlim(-2e11, 2e11)
+    plt.ylim(-2e11, 2e11)
+    plt.legend()
+
+fig, ax = plt.subplots()
+ani = FuncAnimation(fig, animate, interval=20, cache_frame_data=False)  # Faster updates
+plt.show()
