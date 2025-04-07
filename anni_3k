@@ -1,0 +1,186 @@
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import math
+
+def solve_E(M, e):
+    E = M
+    for i in range(10):
+        f = E - e * math.sin(E) - M
+        df = 1 - e * math.cos(E)
+        E = E - f/df
+    return E
+
+class OrbitalSystem:
+    def __init__(self, star_mass, planet_mass, dt, x0, y0, vx0, vy0):
+        self.star_mass = star_mass
+        self.planet_mass = planet_mass
+        self.dt = dt
+        self.t = [0]
+        self.x = [x0]
+        self.y = [y0]
+        self.vx = [vx0]
+        self.vy = [vy0]
+        self.ax, self.ay = self.get_acc(x0, y0)
+    def get_acc(self, x, y):
+        r2 = x*x + y*y
+        r = math.sqrt(r2)
+        a = -6.67430e-11 * self.star_mass / r2
+        return a * (x/r), a * (y/r)
+    def step(self):
+        x_now = self.x[-1]
+        y_now = self.y[-1]
+        vx_now = self.vx[-1]
+        vy_now = self.vy[-1]
+        t_now = self.t[-1]
+        ax_new, ay_new = self.get_acc(x_now, y_now)
+        vx_new = vx_now + ax_new * self.dt
+        vy_new = vy_now + ay_new * self.dt
+        x_new = x_now + vx_new * self.dt
+        y_new = y_now + vy_new * self.dt
+        t_new = t_now + self.dt
+        self.vx.append(vx_new)
+        self.vy.append(vy_new)
+        self.x.append(x_new)
+        self.y.append(y_new)
+        self.t.append(t_new)
+
+star_mass = 1.989e30
+planet_mass = 5.972e24
+dt = 3600 * 12
+x0 = 1.5e11
+y0 = 0
+vx0 = 0
+vy0 = 29780
+
+#DEMO = 1
+#DEMO = 2
+#DEMO = 3
+
+if DEMO == 3:
+    orb1 = OrbitalSystem(star_mass, planet_mass, dt, x0, y0, vx0, vy0)
+    x0_2 = 2e11
+    y0_2 = 0
+    vx0_2 = 0
+    vy0_2 = math.sqrt(6.67430e-11 * star_mass / x0_2)
+    orb2 = OrbitalSystem(star_mass, planet_mass, dt, x0_2, y0_2, vx0_2, vy0_2)
+    systems = [orb1, orb2]
+    periods = [None, None]
+    last_cross = [None, None]
+else:
+    orb = OrbitalSystem(star_mass, planet_mass, dt, x0, y0, vx0, vy0)
+    systems = [orb]
+
+if DEMO == 1 or DEMO == 2:
+    energy = 0.5 * (vx0**2 + vy0**2) - 6.67430e-11 * star_mass / math.sqrt(x0*x0 + y0*y0)
+    a = -6.67430e-11 * star_mass / (2 * energy)
+    L = x0 * vy0
+    e = math.sqrt(1 + (2 * energy * L * L) / (6.67430e-11**2 * star_mass**2))
+    b = a * math.sqrt(1 - e*e)
+    theta_points = [i * 0.01 for i in range(0, int(2*math.pi/0.01)+1)]
+    ellipse_x = [a * math.cos(theta) - a * e for theta in theta_points]
+    ellipse_y = [b * math.sin(theta) for theta in theta_points]
+    if DEMO == 2:
+        T = 2 * math.pi * math.sqrt(a**3 / (6.67430e-11 * star_mass))
+        dt_arc = 30 * 86400
+        N_arcs = int(round(T / dt_arc))
+        arc_boundaries = []
+        for i in range(N_arcs+1):
+            M_val = 2 * math.pi * i / N_arcs
+            E_val = solve_E(M_val, e)
+            arc_boundaries.append(E_val)
+        arc_segments = []
+        arc_areas = []
+        num_points_arc = 50
+        for i in range(N_arcs):
+            E_start = arc_boundaries[i]
+            E_end = arc_boundaries[i+1]
+            Es = [E_start + j*(E_end - E_start)/num_points_arc for j in range(num_points_arc+1)]
+            xs = [a * math.cos(E) - a * e for E in Es]
+            ys = [b * math.sin(E) for E in Es]
+            arc_segments.append((xs, ys))
+            area = 0.5 * a * b * ((E_end - e*math.sin(E_end)) - (E_start - e*math.sin(E_start)))
+            arc_areas.append(area)
+        arc_colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'yellow',
+                      'pink', 'brown', 'lime', 'gray']
+
+fig, ax = plt.subplots()
+
+def poly_area(xlist, ylist):
+    area = 0
+    n = len(xlist)
+    for i in range(n):
+        j = (i + 1) % n
+        area += xlist[i] * ylist[j] - xlist[j] * ylist[i]
+    return abs(area)/2
+
+def animate(frame):
+    ax.cla()
+    if DEMO == 3:
+        for i, sys in enumerate(systems):
+            sys.step()
+            ax.plot(sys.x, sys.y, label='Orbit ' + str(i+1))
+            ax.scatter(sys.x[-1], sys.y[-1])
+            if len(sys.t) > 1:
+                if sys.y[-2] < 0 and sys.y[-1] >= 0 and sys.x[-1] > 0:
+                    if last_cross[i] is not None:
+                        per = sys.t[-1] - last_cross[i]
+                        periods[i] = per
+                    last_cross[i] = sys.t[-1]
+        ax.scatter(0, 0, color='yellow', s=300, label='Sun')
+        ax.set_xlabel('x (m)')
+        ax.set_ylabel('y (m)')
+        ax.set_title("Kepler's Third Law")
+        ax.legend()
+        E1 = 0.5 * (vx0**2 + vy0**2) - 6.67430e-11 * star_mass / math.sqrt(x0*x0 + y0*y0)
+        a1 = -6.67430e-11 * star_mass / (2 * E1)
+        E2 = 0.5 * (vx0_2**2 + vy0_2**2) - 6.67430e-11 * star_mass / math.sqrt(x0_2*x0_2 + y0*y0)
+        a2 = -6.67430e-11 * star_mass / (2 * E2)
+        text = ""
+        if periods[0] is not None:
+            text += "Orbit 1 Period: " + format(periods[0], ".2e") + " s, T^2/a^3: " + format((periods[0]**2)/(a1**3), ".2e") + "\n"
+        if periods[1] is not None:
+            text += "Orbit 2 Period: " + format(periods[1], ".2e") + " s, T^2/a^3: " + format((periods[1]**2)/(a2**3), ".2e")
+        ax.text(0.05, 0.95, text, transform=ax.transAxes, verticalalignment='top')
+    elif DEMO == 1:
+        systems[0].step()
+        ax.plot(systems[0].x, systems[0].y, color='blue', linewidth=0.8, label='Orbit')
+        ax.scatter(systems[0].x[-1], systems[0].y[-1], color='blue', s=50, label='Planet')
+        ax.scatter(0, 0, color='yellow', s=300, label='Sun')
+        ax.set_xlabel('x (m)')
+        ax.set_ylabel('y (m)')
+        ax.set_title("Kepler's First Law")
+        ax.set_xlim(-2e11, 2e11)
+        ax.set_ylim(-2e11, 2e11)
+        ax.legend()
+        nump = int(len(ellipse_x) * min(frame / 100, 1))
+        ax.plot(ellipse_x[:nump], ellipse_y[:nump], 'r--', label='Fitted Ellipse')
+    elif DEMO == 2:
+        systems[0].step()
+        ax.plot(systems[0].x, systems[0].y, color='blue', linewidth=0.8, label='Orbit')
+        ax.scatter(systems[0].x[-1], systems[0].y[-1], color='blue', s=50, label='Planet')
+        ax.scatter(0, 0, color='yellow', s=300, label='Sun')
+        ax.set_xlabel('x (m)')
+        ax.set_ylabel('y (m)')
+        ax.set_title("Kepler's Second Law")
+        ax.set_xlim(-2e11, 2e11)
+        ax.set_ylim(-2e11, 2e11)
+        ax.legend()
+        frames_per_arc = 50
+        current_arc = frame // frames_per_arc
+        if current_arc > len(arc_segments):
+            current_arc = len(arc_segments)
+        for i in range(len(arc_segments)):
+            xs, ys = arc_segments[i]
+            if i < current_arc:
+                ax.fill([0] + xs, [0] + ys, color=arc_colors[i], alpha=0.3)
+            elif i == current_arc:
+                frac = (frame % frames_per_arc) / frames_per_arc
+                num = int(len(xs) * frac)
+                ax.fill([0] + xs[:num], [0] + ys[:num], color=arc_colors[i], alpha=0.3)
+            mid_index = len(xs)//2
+            mid_x = xs[mid_index]
+            mid_y = ys[mid_index]
+            ax.text(mid_x, mid_y, format(arc_areas[i], ".2e"), fontsize=8)
+
+ani = FuncAnimation(fig, animate, interval=20, cache_frame_data=False)
+plt.show()
