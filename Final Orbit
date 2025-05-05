@@ -1,0 +1,467 @@
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import math
+
+#  gravity constant
+G = 6.67430e-11
+
+# this class simulates a planet orbiting a fixed star and saves its history
+class orbital_system:
+    def __init__(self, mass_star, mass_planet, dt, x0, y0, vx0, vy0):
+        # save star mass and planet mass and time step
+        self.M = mass_star
+        self.m = mass_planet
+        self.dt = dt
+        # start time and initial pos and vel
+        self.t = [0]
+        self.x = [x0]
+        self.y = [y0]
+        self.vx = [vx0]
+        self.vy = [vy0]
+        self.ax, self.ay = self.compute_acc(x0, y0)
+    def compute_acc(self, x, y):
+        # get r squared and then r
+        r2 = x*x + y*y
+        r = math.sqrt(r2)
+        # get acceleration from gravity
+        a = -G * self.M / r2
+        return a * (x / r), a * (y / r)
+    def step(self):
+        # get current pos vel and time
+        cx = self.x[-1]
+        cy = self.y[-1]
+        cvx = self.vx[-1]
+        cvy = self.vy[-1]
+        ct = self.t[-1]
+        # get new acceleration
+        nax, nay = self.compute_acc(cx, cy)
+        # update velocity
+        nvx = cvx + nax * self.dt
+        nvy = cvy + nay * self.dt
+        # update position
+        nx = cx + nvx * self.dt
+        ny = cy + nvy * self.dt
+        # update time
+        nt = ct + self.dt
+        # save new values
+        self.vx.append(nvx)
+        self.vy.append(nvy)
+        self.x.append(nx)
+        self.y.append(ny)
+        self.t.append(nt)
+
+# this class is for a moving body that does not store history
+class body:
+    def __init__(self, mass, x0, y0, vx0, vy0):
+        self.m = mass
+        self.x = x0
+        self.y = y0
+        self.vx = vx0
+        self.vy = vy0
+    def update(self, ax, ay, dt):
+        # update velocity and pos
+        self.vx += ax * dt
+        self.vy += ay * dt
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+
+# this function computes acceleration on b2 from b1
+def accel_between(b1, b2):
+    dx = b2.x - b1.x
+    dy = b2.y - b1.y
+    r2 = dx*dx + dy*dy
+    r = math.sqrt(r2)
+    a = G * b1.m / r2
+    return -a * dx / r, -a * dy / r
+
+# this function draws an info box on the plot
+def draw_info_box(ax, info_text):
+    ax.text(0.01, 0.95, info_text, transform=ax.transAxes, fontsize=8,
+            verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
+
+# global constants for star planet system
+mass_sun = 1.989e30  # sun mass
+mass_earth = 5.972e24  # earth mass
+dt = 3600 * 12  # 12 hour time step in seconds
+x0 = 1.5e11 # initial earth x pos
+y0 = 0 # initial earth y pos
+vx0 = 0 # initial earth x vel
+vy0 = 29780 # initial earth y vel
+
+# choose demo mode
+# demo 1 is kepler 1srt law --> theo ellipse over sim orbit)
+# demo 2 is kepler second law (equal area segments fill as orbit progresses)
+# demo 3 is kepler third law (two planet simulation for period ratio w/ faster dt)
+# demo 4 is dual planet system (binary planets orbiting a fixed star)
+# demo 5 is binary star system (two stars with a circumbinary planet in stable orbit)
+DEMO = 5
+
+# setup for demo 1 - kepler first law
+# setup for demo 1 - kepler first law
+if DEMO == 1:
+    # numeric orbit object
+    orb = orbital_system(mass_sun, mass_earth, dt, x0, y0, vx0, vy0)
+
+    # compute orbital energy, semi-major axis a
+    energy = 0.5*(vx0*vx0 + vy0*vy0) - G*mass_sun/math.hypot(x0, y0)
+    a = -G*mass_sun/(2*energy)
+
+    # compute eccentricity e
+    L = x0 * vy0
+    e = math.sqrt(1 + (2*energy*L*L)/(G*G*mass_sun*mass_sun))
+
+    # build analytic ellipse points
+    theta_vals = [i*0.01 for i in range(int(2*math.pi/0.01)+1)]
+    polar_x = []
+    polar_y = []
+    for θ in theta_vals:
+        r = a*(1 - e*e)/(1 + e*math.cos(θ))
+        polar_x.append(r * math.cos(θ))
+        polar_y.append(r * math.sin(θ))
+
+
+# setup for demo 2 - kepler second law
+elif DEMO == 2:
+    # create one orbit for simulation
+    orb = orbital_system(mass_sun, mass_earth, dt, x0, y0, vx0, vy0)
+    # compute orbital parameters as in demo 1
+    energy = 0.5*(vx0*vx0+vy0*vy0) - G*mass_sun/math.sqrt(x0*x0+y0*y0)
+    a = -G*mass_sun/(2*energy)
+    L = x0*vy0
+    e = math.sqrt(1+(2*energy*L*L)/(G*G*mass_sun*mass_sun))
+    b = a * math.sqrt(1-e*e)
+    # compute orbital period T
+    T = 2*math.pi*math.sqrt(a**3/(G*mass_sun))
+    # set segments to 6
+    segments = 6
+    # function to solve for eccentric anomaly E for given mean anomaly M
+    def solve_E(M, e):
+        E = M
+        for i in range(10):
+            E = E - (E - e*math.sin(E) - M)/(1 - e*math.cos(E))
+        return E
+    # get E values that divide the orbit into equal area (equal time) segments
+    E_list = []
+    for i in range(segments+1):
+        M_i = 2*math.pi * i/segments
+        E_val = solve_E(M_i, e)
+        E_list.append(E_val)
+    # precompute arc segments for each segment 
+    arc_segments = []
+    for i in range(segments):
+        E_start = E_list[i]
+        E_end = E_list[i+1]
+        num_points = 50
+        seg_x = []
+        seg_y = []
+        for j in range(num_points+1):
+            E_val = E_start + (E_end - E_start)*j/num_points
+            # use param eq of ellipse with focus at (-a*e, 0)
+            x_val = a * math.cos(E_val) - a * e
+            y_val = b * math.sin(E_val)
+            seg_x.append(x_val)
+            seg_y.append(y_val)
+        arc_segments.append((seg_x, seg_y))
+    # compute area for each segment using formula
+    # area = 0.5 * a * b * ((E_end - e*sin(E_end)) - (E_start - e*sin(E_start)))
+    arc_areas = []
+    for i in range(segments):
+        E1 = E_list[i]
+        E2 = E_list[i+1]
+        area_seg = 0.5 * a * b * ((E2 - e*math.sin(E2)) - (E1 - e*math.sin(E1)))
+        arc_areas.append(area_seg)
+    # choose 6 colors for segments
+    seg_colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan']
+
+# setup for demo 3 - kepler third law
+elif DEMO == 3:
+    # use a faster time scale with one day per step
+    dt3 = 86400  # one day in seconds
+    # create first planet like earth orbit
+    orb1 = orbital_system(mass_sun, mass_earth, dt3, x0, y0, vx0, vy0)
+    # create second planet further out with circular orbit velocity
+    x0_2 = 2e11
+    y0_2 = 0
+    vx0_2 = 0
+    vy0_2 = math.sqrt(G*mass_sun/x0_2)
+    orb2 = orbital_system(mass_sun, mass_earth, dt3, x0_2, y0_2, vx0_2, vy0_2)
+    # prepare lists to record periods by detecting crossing of the positive x axis
+    periods = [None, None]
+    last_cross = [None, None]
+    # compute semi major axes from initial conditions for ratio calculation
+    energy1 = 0.5*(vx0*vx0+vy0*vy0) - G*mass_sun/math.sqrt(x0*x0+y0*y0)
+    a1 = -G*mass_sun/(2*energy1)
+    energy2 = 0.5*(vx0_2*vx0_2+vy0_2*vy0_2) - G*mass_sun/math.sqrt(x0_2*x0_2+y0_2*y0_2)
+    a2 = -G*mass_sun/(2*energy2)
+
+# setup for demo 4 - dual planet system (binary planets orbiting a fixed star)
+elif DEMO == 4:
+    # — Binary planets + Sun (with visual exaggeration) —
+
+    # masses
+    mass_star   = mass_sun
+    mass_planet = mass_earth * 0.5
+
+    # geometry
+    R_cm = 1.5e11   # COM orbit radius (m)
+    d    = 5e8      # physical separation (m), << Hill radius
+
+    # orbital periods
+    T_com = 2*math.pi * math.sqrt(R_cm**3     / (G * mass_star))
+    T_mut = 2*math.pi * math.sqrt(d**3        / (2 * G * mass_planet))
+
+    # time step small enough for both orbits
+    dt4 = min(T_com/2000, T_mut/1000)
+
+    # circular speeds
+    v_cm  = math.sqrt(G * mass_star            / R_cm)
+    v_rel = math.sqrt(G * mass_planet          / (2 * d))
+
+    # visual‐exaggeration factor for the small binary loop
+    visual_scale = 20
+
+    # make bodies
+    star    = body(mass_star,   0,          0,           0,          0)
+    planet1 = body(mass_planet, R_cm + d/2, 0,           0, v_cm + v_rel)
+    planet2 = body(mass_planet, R_cm - d/2, 0,           0, v_cm - v_rel)
+
+    # histories for drawing
+    com_x_hist    = [ (planet1.x+planet2.x)/2 ]
+    com_y_hist    = [ (planet1.y+planet2.y)/2 ]
+    scaled_x1     = com_x_hist[0] + (planet1.x-com_x_hist[0])*visual_scale
+    scaled_y1     = com_y_hist[0] + (planet1.y-com_y_hist[0])*visual_scale
+    scaled_x2     = com_x_hist[0] + (planet2.x-com_x_hist[0])*visual_scale
+    scaled_y2     = com_y_hist[0] + (planet2.y-com_y_hist[0])*visual_scale
+    scaled_x1_hist = [scaled_x1]; scaled_y1_hist = [scaled_y1]
+    scaled_x2_hist = [scaled_x2]; scaled_y2_hist = [scaled_y2]
+
+
+elif DEMO == 5:
+
+    mass_star   = mass_sun
+    mass_planet = mass_earth
+
+    d = 1e10  # star–star separation
+    R = 1e11 # new, smaller planet radius
+
+    T_bin    = 2*math.pi * math.sqrt(d**3   / (2*G*mass_star))
+    T_planet = 2*math.pi * math.sqrt(R**3   / (2*G*mass_star))
+
+    # bigger dt thfo faster motion
+    dt5 = min(T_bin/200, T_planet/200)
+
+    v_star   = math.sqrt(G*mass_star   / (2*d))
+    v_planet = math.sqrt(G*(2*mass_star)/   R)
+
+    star1  = body(mass_star, -d/2, 0,  0,  v_star)
+    star2  = body(mass_star,  d/2, 0,  0, -v_star)
+    planet = body(mass_planet,     R, 0,  0,  v_planet)
+
+    x1_hist = [star1.x];  y1_hist = [star1.y]
+    x2_hist = [star2.x];  y2_hist = [star2.y]
+    xp_hist = [planet.x]; yp_hist = [planet.y]
+
+
+
+
+# set up figure for all demos
+fig, ax = plt.subplots()
+
+def animate(frame):
+    ax.cla()  # clear axes each frame
+    info = ""  # text for info box
+    if DEMO == 1:
+        # step one time-step
+        orb.step()
+
+        # plot numeric orbit so far
+        ax.plot(orb.x, orb.y, color='blue', label='sim orbit')
+        ax.scatter(orb.x[-1], orb.y[-1], color='blue')
+
+        # latest simulated point
+        x_s, y_s = orb.x[-1], orb.y[-1]
+        θ = math.atan2(y_s, x_s)
+
+        # corresponding point on analytic ellipse
+        r_e = a*(1 - e*e)/(1 + e*math.cos(θ))
+        x_e, y_e = r_e*math.cos(θ), r_e*math.sin(θ)
+
+        # draw error vector
+        ax.plot([x_s, x_e], [y_s, y_e], color='gray', linewidth=1)
+
+        # plot analytic ellipse
+        ax.plot(polar_x, polar_y, 'r--', label='theor ellipse')
+
+        # compute radial error
+        err = math.hypot(x_s - x_e, y_s - y_e)
+
+        # info box
+        info += f"star mass   {mass_sun:.2e}\n"
+        info += f"planet mass {mass_earth:.2e}\n"
+        info += f"dt          {dt:.2e}\n"
+        info += f"a (semi)    {a:.2e}\n"
+        info += f"e (eccent)  {e:.2e}\n"
+        info += f"error       {err:.2e}"
+    elif DEMO == 2:
+        # demo 2 - kepler second law
+        orb.step()
+        # plot simulated orbit in blue
+        ax.plot(orb.x, orb.y, color='blue', label='sim orbit')
+        ax.scatter(orb.x[-1], orb.y[-1], color='blue')
+        # compute current progress of orbit using time fraction
+        f_prog = (orb.t[-1] % T) / T
+        current_E = f_prog * 2 * math.pi
+        # fill theoretical segments progressively
+        for i in range(segments):
+            E_start = E_list[i]
+            E_end = E_list[i+1]
+            if current_E >= E_end:
+                # fill full segment
+                seg_x, seg_y = arc_segments[i]
+                ax.fill([0] + seg_x, [0] + seg_y, color=seg_colors[i], alpha=0.3)
+                mid = len(seg_x)//2
+                ax.text(seg_x[mid], seg_y[mid], f"{arc_areas[i]:.2e}", fontsize=8)
+            elif current_E > E_start and current_E < E_end:
+                # fill partially in current segment
+                fraction = (current_E - E_start) / (E_end - E_start)
+                num_points = len(arc_segments[i][0])
+                num_partial = int(num_points * fraction)
+                seg_x = arc_segments[i][0][:num_partial]
+                seg_y = arc_segments[i][1][:num_partial]
+                ax.fill([0] + seg_x, [0] + seg_y, color=seg_colors[i], alpha=0.3)
+                if len(seg_x) > 0:
+                    mid = len(seg_x)//2
+                    area_partial = arc_areas[i] * fraction
+                    ax.text(seg_x[mid], seg_y[mid], f"{area_partial:.2e}", fontsize=8)
+            # else do not fill segments not reached yet
+        info += "semi major " + f"{a:.2e}" + "\n"
+        info += "eccent " + f"{e:.2e}" + "\n"
+        info += "T " + f"{T:.2e}"
+    elif DEMO == 3:
+        # demo 3 - kepler third law
+        orb1.step()
+        orb2.step()
+        # plot planet 1 in blue
+        ax.plot(orb1.x, orb1.y, color='blue', label='planet 1')
+        ax.scatter(orb1.x[-1], orb1.y[-1], color='blue')
+        # plot planet 2 in green
+        ax.plot(orb2.x, orb2.y, color='green', label='planet 2')
+        ax.scatter(orb2.x[-1], orb2.y[-1], color='green')
+        # detect crossing of positive x axis for planet 1 for period measurement
+        if len(orb1.t) > 1:
+            if orb1.y[-2] < 0 and orb1.y[-1] >= 0 and orb1.x[-1] > 0:
+                if last_cross[0] is not None:
+                    periods[0] = orb1.t[-1] - last_cross[0]
+                last_cross[0] = orb1.t[-1]
+        # detect crossing for planet 2
+        if len(orb2.t) > 1:
+            if orb2.y[-2] < 0 and orb2.y[-1] >= 0 and orb2.x[-1] > 0:
+                if last_cross[1] is not None:
+                    periods[1] = orb2.t[-1] - last_cross[1]
+                last_cross[1] = orb2.t[-1]
+        info += "p1 period " + (f"{periods[0]:.2e}" if periods[0] is not None else "none") + "\n"
+        info += "p2 period " + (f"{periods[1]:.2e}" if periods[1] is not None else "none") + "\n"
+        # compute ratio t^2/a^3 for each if period exists
+        ratio1 = (periods[0]**2)/(a1**3) if periods[0] is not None else None
+        ratio2 = (periods[1]**2)/(a2**3) if periods[1] is not None else None
+        info += "ratio1 t^2/a^3 " + (f"{ratio1:.2e}" if ratio1 is not None else "none") + "\n"
+        info += "ratio2 t^2/a^3 " + (f"{ratio2:.2e}" if ratio2 is not None else "none")
+    elif DEMO == 4:
+        a1s_x, a1s_y = accel_between(star,   planet1)
+        a1m_x, a1m_y = accel_between(planet2, planet1)
+        planet1.update(a1s_x + a1m_x, a1s_y + a1m_y, dt4)
+
+        a2s_x, a2s_y = accel_between(star,   planet2)
+        a2m_x, a2m_y = accel_between(planet1, planet2)
+        planet2.update(a2s_x + a2m_x, a2s_y + a2m_y, dt4)
+
+        COM_x = (planet1.x + planet2.x)/2
+        COM_y = (planet1.y + planet2.y)/2
+        com_x_hist.append(COM_x)
+        com_y_hist.append(COM_y)
+
+        sx1 = COM_x + (planet1.x - COM_x)*visual_scale
+        sy1 = COM_y + (planet1.y - COM_y)*visual_scale
+        sx2 = COM_x + (planet2.x - COM_x)*visual_scale
+        sy2 = COM_y + (planet2.y - COM_y)*visual_scale
+
+        scaled_x1_hist.append(sx1)
+        scaled_y1_hist.append(sy1)
+        scaled_x2_hist.append(sx2)
+        scaled_y2_hist.append(sy2)
+
+        ax.cla()
+        # Sun as a circle
+        ax.scatter(0, 0, color='orange', s=300, label='sun')
+        # com orbit path
+        ax.plot(com_x_hist, com_y_hist, '--', color='orange', label='COM orbit')
+        # scaled binary loops
+        ax.plot(scaled_x1_hist, scaled_y1_hist, 'b-', label='planet 1 loop')
+        ax.plot(scaled_x2_hist, scaled_y2_hist, 'g-', label='planet 2 loop')
+        # current positions
+        ax.scatter(sx1, sy1, color='blue',  s=30)
+        ax.scatter(sx2, sy2, color='green', s=30)
+
+        # zoom to include the scaled loops
+        lim = R_cm + d*visual_scale + R_cm*0.1
+        ax.set_xlim(-lim, lim)
+        ax.set_ylim(-lim, lim)
+
+        # info box
+        info += f"R_cm         {R_cm:.1e} m\n"
+        info += f"d (phys)     {d:.1e} m\n"
+        info += f"vis_scale    {visual_scale}×\n"
+        info += f"dt           {dt4:.1e} s"
+    elif DEMO == 5:
+        # step the two stars under mutual + planet gravity
+        a1s_x, a1s_y = accel_between(star2, star1)
+        a1p_x, a1p_y = accel_between(planet, star1)
+        star1.update(a1s_x + a1p_x, a1s_y + a1p_y, dt5)
+
+        a2s_x, a2s_y = accel_between(star1, star2)
+        a2p_x, a2p_y = accel_between(planet, star2)
+        star2.update(a2s_x + a2p_x, a2s_y + a2p_y, dt5)
+
+        # step the planet under both stars’ gravity
+        ap1_x, ap1_y = accel_between(star1, planet)
+        ap2_x, ap2_y = accel_between(star2, planet)
+        planet.update(ap1_x + ap2_x, ap1_y + ap2_y, dt5)
+
+        # record new positions
+        x1_hist.append(star1.x); y1_hist.append(star1.y)
+        x2_hist.append(star2.x); y2_hist.append(star2.y)
+        xp_hist.append(planet.x); yp_hist.append(planet.y)
+
+        # clear & draw orbits
+        ax.cla()
+        ax.plot(x1_hist, y1_hist, 'r--', label='star 1 orbit')
+        ax.plot(x2_hist, y2_hist, 'b--', label='star 2 orbit')
+        ax.plot(xp_hist, yp_hist, 'g-',  label='planet orbit')
+
+        # draw current bodies
+        ax.scatter(star1.x, star1.y, color='red',   s=60)
+        ax.scatter(star2.x, star2.y, color='blue',  s=60)
+        ax.scatter(planet.x, planet.y, color='green', s=30)
+
+        # zoom into the inner binary
+        lim = d * 1.5
+        ax.set_xlim(-lim, lim)
+        ax.set_ylim(-lim, lim)
+        ax.set_aspect('equal', 'box')
+        ax.legend(loc='upper right')
+        ax.set_title('Binary Stars + Circumbinary Planet')
+
+    # common drawing for demos 1 2 3
+    if DEMO in [1,2,3]:
+        ax.scatter(0, 0, color='yellow', s=300, label='sun')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_title('orbit simulation')
+    ax.set_xlim(-3e11, 3e11)
+    ax.set_ylim(-3e11, 3e11)
+    ax.legend(loc='lower right')
+    draw_info_box(ax, info)
+
+ani = FuncAnimation(fig, animate, interval=20, cache_frame_data=False)
+plt.show()
+
