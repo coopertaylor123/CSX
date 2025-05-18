@@ -1,0 +1,45 @@
+import math
+def estimate_velocity(psi):
+    return 0.165 * psi + 11.07
+
+def calculate_launch_height(angle_deg):
+    angle_rad = math.radians(angle_deg)
+    h_cm = 10 + 32.5 * math.sin(angle_rad)
+    return h_cm / 100  # convert cm to meters
+
+def calculate_max_altitude(v0, angle_deg, h0):
+    angle_rad = math.radians(angle_deg)
+    v0y = v0 * math.sin(angle_rad)
+    return h0 + (v0y ** 2) / (2 * 9.8)
+
+def calculate_range(v0, angle_deg, h0):
+    angle_rad = math.radians(angle_deg)
+    g = 9.8
+    v0y = v0 * math.sin(angle_rad)
+    v0x = v0 * math.cos(angle_rad)
+    t_flight = (v0y + math.sqrt(v0y**2 + 2 * g * h0)) / g
+    return v0x * t_flight
+
+def predict_trajectory(psi, angle_deg):
+    v0 = estimate_velocity(psi)
+    h0 = calculate_launch_height(angle_deg)
+    max_altitude = calculate_max_altitude(v0, angle_deg, h0)
+    range_distance = calculate_range(v0, angle_deg, h0)
+    return v0, h0, max_altitude, range_distance
+
+try:
+    angle_input = float(input("Enter launch angle (0 to 90 degrees): "))
+    psi_input = float(input("Enter PSI: "))
+
+    if not (0 <= angle_input <= 90):
+        raise ValueError("Angle must be between 0 and 90 degrees.")
+
+    v0, h0, max_alt, distance = predict_trajectory(psi_input, angle_input)
+
+    print(f"\nInitial vel: {v0:.2f} m/s")
+    print(f"Launch height: {h0:.2f} m")
+    print(f"Max alt: {max_alt:.2f} m")
+    print(f"Total dist trav: {distance:.2f} m")
+
+except ValueError as e:
+    print(f" {e}")
